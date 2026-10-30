@@ -1,0 +1,24 @@
+{
+    "name": "Courtside Basketball Tracker",
+    "short_name": "Courtside",
+    "description": "Offline basketball stats, box scores, and CSV exports.",
+    "start_url": "./index.html",
+    "scope": "./",
+    "display": "standalone",
+    "background_color": "#f5f6f1",
+    "theme_color": "#143c35",
+    "icons": [
+        {
+            "src": "./assets/icon-192.png",
+            "sizes": "192x192",
+            "type": "./image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "./assets/icon-512.png",
+            "sizes": "512x512",
+            "type": "./image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}

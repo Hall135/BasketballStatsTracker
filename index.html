@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#143c35">
+    <meta name="description" content="Offline basketball scorekeeping and box scores.">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" href="./assets/icon-192.png">
+    <link rel="apple-touch-icon" href="./assets/icon-192.png">
+    <link rel="stylesheet" href="./styles.css">
+    <title>Courtside · Basketball Tracker</title>
+    <script src="./stats.js" defer></script>
+    <script src="./storage.js" defer></script>
+    <script src="./app.js" defer></script>
+</head>
+
+<body>
+    <header class="topbar"><a class="brand" href="./"><span class="ball">◉</span> COURTSIDE <span
+                class="brand-note">BASKETBALL TRACKER</span></a>
+        <div class="status"><span id="offline-status">Loading saved data…</span><button id="install" hidden>Install
+                app</button></div>
+    </header>
+    <main>
+        <div class="page-intro">
+            <div>
+                <p class="eyebrow">EVERY PLAY COUNTS</p>
+                <h1>Your game. On record.</h1>
+                <p class="muted">Tap a player. Log the play. Stay with the game.</p>
+            </div><button class="primary" id="new-game">＋ New game</button>
+        </div>
+        <div class="workspace">
+            <aside>
+                <div class="section-heading">
+                    <h2>Games</h2><span id="game-count" class="badge">0</span>
+                </div>
+                <div id="games"></div><button id="teams-button" class="roster-button">♜ Manage teams</button><button
+                    id="roster-button" class="roster-button">♟ Manage player roster</button>
+                <div class="storage-note"><span class="dot"></span> Saved on this device<p>No account needed. Games stay
+                        in this browser. Export your results to keep a copy.</p>
+                </div>
+            </aside>
+            <section id="game-area" aria-label="Selected game"></section>
+        </div>
+        <div id="notice" role="status" aria-live="polite"></div>
+    </main>
+    <dialog id="game-dialog">
+        <form id="game-form">
+            <div class="dialog-heading">
+                <div>
+                    <p class="eyebrow">TIP-OFF</p>
+                    <h2>Create a game</h2>
+                </div><button type="button" class="close" data-close aria-label="Close">×</button>
+            </div><label>Game name<input name="title" required maxlength="80"
+                    placeholder="e.g. Tigers vs. Eagles"></label><label>Game date<input name="date" type="date"
+                    required></label><label>Saved team <span class="muted">(optional)</span><select name="team"
+                    id="game-team"></select></label>
+            <fieldset>
+                <legend>Select players</legend>
+                <div id="game-player-options"></div>
+            </fieldset>
+            <p class="muted small">Selecting a team checks its players. Add or uncheck individual players as needed.</p>
+            <button class="primary" type="submit">Create game</button>
+        </form>
+    </dialog>
+    <dialog id="roster-dialog">
+        <div class="dialog-heading">
+            <div>
+                <p class="eyebrow">YOUR TEAM</p>
+                <h2>Player roster</h2>
+            </div><button class="close" data-close aria-label="Close">×</button>
+        </div>
+        <form id="player-form"><label>Player name<input name="name" required maxlength="60"
+                    placeholder="Player name"></label><label>Add to team <span class="muted">(optional)</span><select
+                    name="team" id="player-team"></select></label><label>Jersey number <span
+                    class="muted">(optional)</span><input name="number" maxlength="3" inputmode="numeric"
+                    pattern="[0-9]{1,3}" placeholder="23"></label><button class="primary" type="submit">＋ Save
+                player</button></form>
+        <div id="roster-list"></div>
+    </dialog>
+    <dialog id="add-dialog">
+        <form id="add-form">
+            <div class="dialog-heading">
+                <h2>Add players to game</h2><button type="button" class="close" data-close aria-label="Close">×</button>
+            </div><label>Include saved team <span class="muted">(optional)</span><select id="add-team"></select></label>
+            <div id="add-options"></div><button class="primary" type="submit">Add selected players</button>
+        </form>
+    </dialog>
+    <dialog id="teams-dialog">
+        <div class="dialog-heading">
+            <div>
+                <p class="eyebrow">YOUR TEAMS</p>
+                <h2>Saved teams</h2>
+            </div><button class="close" data-close aria-label="Close">×</button>
+        </div>
+        <div id="teams-list"></div>
+        <form id="team-form">
+            <h3 id="team-form-title">Create a team</h3><label>Team name<input name="name" required maxlength="80"
+                    placeholder="e.g. Tigers varsity"></label>
+            <fieldset>
+                <legend>Team players</legend>
+                <div id="team-player-options"></div>
+            </fieldset>
+            <p class="muted small">Players can belong to multiple teams. Add new individuals in Manage player roster.
+            </p>
+            <div class="team-actions"><button class="primary" type="submit">Save team</button><button type="button"
+                    id="team-new">New team</button></div>
+        </form>
+    </dialog>
+    <dialog id="edit-dialog">
+        <form id="edit-form">
+            <div class="dialog-heading">
+                <div>
+                    <p class="eyebrow">CORRECT THE RECORD</p>
+                    <h2 id="edit-title">Edit statistics</h2>
+                </div><button type="button" class="close" data-close aria-label="Close">×</button>
+            </div>
+            <p class="muted small">Edit play counts below. Points and shooting totals update automatically.</p>
+            <div id="edit-fields" class="edit-grid"></div><button class="primary" type="submit">Save
+                corrections</button>
+        </form>
+    </dialog>
+    <noscript>This app requires JavaScript to record and save statistics.</noscript>
+</body>
+
+</html>
