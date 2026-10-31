@@ -3,7 +3,8 @@ const { fields, blank, totals, csvCell } = CourtStats;
 const $ = selector => document.querySelector(selector);
 let state = { roster: [], teams: [], games: [], active: null }, selected = null, view = 'track', editing = null, editingTeam = null, storageBlocked = true, revision = 0;
 let saveQueue = Promise.resolve();
-let editingPlayer = null, deletingPlayer = null;
+let editingPlayer = null, deletingPlayer = null, deletingTeam = null;
+let pendingImport = null;
 const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const id = () => crypto.randomUUID();
 const game = () => state.games.find(g => g.id === state.active);
@@ -29,9 +30,43 @@ function prepareSavedStats(data) {
   });
   return updated;
 }
-function validState(s) {
-  return s && (s.teams === undefined || (Array.isArray(s.teams) && s.teams.every(t => typeof t.id === 'string' && typeof t.name === 'string' && Array.isArray(t.playerIds) && t.playerIds.every(id => s.roster.some(p => p.id === id))))) && Array.isArray(s.roster) && s.roster.every(p => typeof p.id === 'string' && typeof p.name === 'string' && typeof p.number === 'string') && Array.isArray(s.games) && s.games.every(g => typeof g.id === 'string' && typeof g.title === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(g.date) && Array.isArray(g.players) && g.players.every(p => typeof p.id === 'string' && typeof p.name === 'string' && typeof p.number === 'string' && validStats(p.stats)) && Array.isArray(g.history) && g.history.every(h => typeof h.playerId === 'string' && validStats(h.before) && typeof h.label === 'string'));
+function uniqueIds(records) {
+  if (!Array.isArray(records)) return false;
+  const seen = new Set();
+  for (const record of records) {
+    if (!record || typeof record.id !== 'string' || !record.id || seen.has(record.id)) return false;
+    seen.add(record.id);
+  }
+  return true;
 }
+function validPlayer(player) {
+  return player && typeof player.name === 'string' && player.name.trim().length > 0 &&
+    player.name.length <= 60 && typeof player.number === 'string' && /^(?:[0-9]{1,3})?$/.test(player.number);
+}
+function validState(data) {
+  if (!data || !uniqueIds(data.roster) || !uniqueIds(data.teams) || !uniqueIds(data.games)) return false;
+  if (!data.roster.every(validPlayer)) return false;
+  for (const team of data.teams) {
+    if (typeof team.name !== 'string' || !team.name.trim() || team.name.length > 80 || !Array.isArray(team.playerIds)) return false;
+    if (new Set(team.playerIds).size !== team.playerIds.length) return false;
+    if (!team.playerIds.every(id => data.roster.some(player => player.id === id))) return false;
+  }
+  for (const game of data.games) {
+    if (typeof game.title !== 'string' || !game.title.trim() || game.title.length > 80) return false;
+    if (typeof game.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(game.date)) return false;
+    const date = new Date(game.date + 'T12:00:00Z');
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== game.date) return false;
+    if (!uniqueIds(game.players) || !game.players.every(player => validPlayer(player) && validStats(player.stats))) return false;
+    if (game.teamId != null && typeof game.teamId !== 'string') return false;
+    if (game.teamName !== undefined && typeof game.teamName !== 'string') return false;
+    if (!Array.isArray(game.history)) return false;
+    for (const action of game.history) {
+      if (!action || !game.players.some(player => player.id === action.playerId) || !validStats(action.before) || typeof action.label !== 'string') return false;
+    }
+  }
+  return data.active === null || data.games.some(game => game.id === data.active);
+}
+
 function commit(change) {
   // Serialize rapid taps and save a complete draft only after its transaction commits.
   const pending = saveQueue.then(async () => {
@@ -56,7 +91,7 @@ function commit(change) {
 const dateText = value => new Date(value + 'T12:00:00').toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'});
 const playerLabel = p => `${p.number ? '#' + p.number + ' · ' : ''}${p.name}`;
 function teamStats(g) { return g.players.reduce((all,p) => { fields.forEach(([k]) => all[k] += p.stats[k]); return all; }, blank()); }
-const teamColumns = [['points','PTS','Points'],['rebounds','REB','Total rebounds'],['assists','AST','Assists'],['steals','STL','Steals'],['blocks','BLK','Blocks'],['turnovers','TOV','Turnovers']];
+const teamColumns = [['points','PTS','Points'],['rebounds','REB','Total rebounds'],['assists','AST','Assists'],['steals','STL','Steals'],['blocks','BLK','Blocks'],['fgPct','FG%','Field goal percentage'],['threePct','3P%','Three-point percentage'],['ftPct','FT%','Free throw percentage'],['turnovers','TOV','Turnovers']];
 function render() {
   $('#game-count').textContent = state.games.length;
   $('#games').innerHTML = state.games.length ? state.games.map(g => `<button class="game-item ${g.id === state.active ? 'active' : ''}" data-game="${esc(g.id)}"><span>${esc(g.title)}</span><small>${esc(dateText(g.date))} · ${g.players.length} players</small></button>`).join('') : '<p class="empty-small">Your games will appear here.</p>';
@@ -75,10 +110,10 @@ function trackMarkup(g) {
   return `<div class="section-heading"><h3>On the roster <span class="muted">/ ${g.players.length}</span></h3><button data-add>＋ Add players</button></div><div class="players">${g.players.map(p => `<button class="player ${p.id === selected ? 'selected' : ''}" data-player="${esc(p.id)}" aria-pressed="${p.id === selected}"><span class="jersey">${esc(p.number || p.name.split(/\s+/).map(n=>n[0]).join('').slice(0,2).toUpperCase())}</span><span class="player-name">${esc(p.name)}</span><span class="player-points">${totals(p.stats).points} <small>PTS</small></span></button>`).join('')}</div>
   ${p ? `<div class="stat-panel"><div class="section-heading"><div><p class="eyebrow">RECORD A PLAY</p><h3>${esc(playerLabel(p))}</h3></div><button data-edit="${esc(p.id)}">Edit totals</button></div><div class="stat-grid">${fields.map(([key,label,symbol,type]) => `<button class="stat ${type}" data-stat="${key}" aria-label="Record ${esc(label)} for ${esc(p.name)}"><span class="stat-icon">${symbol}${type === 'made' ? '<sup>✓</sup>' : type === 'missed' ? '<sup>×</sup>' : ''}</span><span>${label}</span><b>${p.stats[key]}</b></button>`).join('')}</div><p class="small muted">One tap = one play. Made shots update points and attempts automatically.</p></div>` : `<div class="select-hint"><span>↑</span><h3>${g.players.length ? 'Who made the play?' : 'Build your game roster'}</h3><p>${g.players.length ? 'Select a player above to reveal their stat buttons.' : 'Add saved players to start recording.'}</p></div>`}`;
 }
-const columns = [['points','PTS'],['rebounds','REB'],['assists','AST'],['steals','STL'],['blocks','BLK'],['fgm','FGM'],['fga','FGA'],['threeMade','3PM'],['threeAtt','3PA'],['ftMade','FTM'],['ftAtt','FTA'],['offReb','OREB'],['defReb','DREB'],['turnovers','TOV']];
+const columns = [['points','PTS'],['rebounds','REB'],['assists','AST'],['steals','STL'],['blocks','BLK'],['fgm','FGM'],['fga','FGA'],['fgPct','FG%'],['threeMade','3PM'],['threeAtt','3PA'],['threePct','3P%'],['ftMade','FTM'],['ftAtt','FTA'],['ftPct','FT%'],['offReb','OREB'],['defReb','DREB'],['turnovers','TOV']];
 function tableMarkup(g) {
   const row = (name, stats, action='') => `<tr><th scope="row">${name}</th>${columns.map(([key]) => `<td>${totals(stats)[key]}</td>`).join('')}<td>${action}</td></tr>`;
-  return `<div class="section-heading"><h3>Game box score</h3><button data-add>＋ Add players</button></div><div class="table-wrap"><table><caption class="sr-only">Player and team basketball statistics</caption><thead><tr><th scope="col">Player</th>${columns.map(([,label])=>`<th scope="col">${label}</th>`).join('')}<th scope="col">Edit</th></tr></thead><tbody>${g.players.map(p=>row(esc(playerLabel(p)),p.stats,`<button data-edit="${esc(p.id)}" aria-label="Edit stats for ${esc(p.name)}">Edit</button>`)).join('')}</tbody><tfoot>${row('Team total',teamStats(g))}</tfoot></table></div><p class="small muted">PTS points · REB total rebounds · AST assists · STL steals · BLK blocks · FGM/A field goals made/attempted · 3PM/A three-pointers · FTM/A free throws · OREB/DREB offensive/defensive rebounds · TOV turnovers</p>`;
+  return `<div class="section-heading"><h3>Game box score</h3><button data-add>＋ Add players</button></div><div class="table-wrap"><table><caption class="sr-only">Player and team basketball statistics</caption><thead><tr><th scope="col">Player</th>${columns.map(([,label])=>`<th scope="col">${label}</th>`).join('')}<th scope="col">Edit</th></tr></thead><tbody>${g.players.map(p=>row(esc(playerLabel(p)),p.stats,`<button data-edit="${esc(p.id)}" aria-label="Edit stats for ${esc(p.name)}">Edit</button>`)).join('')}</tbody><tfoot>${row('Team total',teamStats(g))}</tfoot></table></div>`;
 }
 function teamOptions() { return '<option value="">Individual players / no team</option>' + state.teams.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join(''); }
 function resetPlayerForm(player = null) {
@@ -88,8 +123,10 @@ function resetPlayerForm(player = null) {
   $('#player-form-title').textContent = player ? 'Edit player' : 'Add a player';
   form.elements.name.value = player?.name || '';
   form.elements.number.value = player?.number || '';
-  $('#player-team').innerHTML = teamOptions();
-  $('#player-team').closest('label').hidden = !!player;
+  $('#player-teams').innerHTML = state.teams.map(team => {
+    const assigned = player && team.playerIds.includes(player.id);
+    return `<label class="check-row"><input type="checkbox" name="teams" value="${esc(team.id)}" ${assigned ? 'checked' : ''}>${esc(team.name)}</label>`;
+  }).join('') || '<p class="small muted">No saved teams yet. This player can be saved without a team.</p>';
   form.querySelector('[type="submit"]').textContent = player ? 'Save player changes' : '＋ Save player';
   $('#player-cancel').hidden = !player;
 }
@@ -116,7 +153,7 @@ function showGameDialog() {
   $('#game-dialog').showModal();
 }
 function renderTeams() {
-  $('#teams-list').innerHTML=state.teams.map(t=>`<div class="team-row"><div><strong>${esc(t.name)}</strong><small>${t.playerIds.length} players</small></div><button data-team-edit="${esc(t.id)}">Edit team</button></div>`).join('') || '<p class="muted">No teams yet. Create your first team below.</p>';
+  $('#teams-list').innerHTML=state.teams.map(t=>`<div class="team-row"><div><strong>${esc(t.name)}</strong><small>${t.playerIds.length} players</small></div><div class="team-actions"><button data-team-edit="${esc(t.id)}" aria-label="Edit team ${esc(t.name)}">Edit</button><button class="danger" data-team-delete="${esc(t.id)}" aria-label="Delete team ${esc(t.name)}">Delete</button></div></div>`).join('') || '<p class="muted">No teams yet. Create your first team below.</p>';
 }
 function resetTeamForm(team=null) {
   editingTeam=team?.id || null;
@@ -152,14 +189,15 @@ onSaveForm('#team-form',async f=>{
 onSaveForm('#player-form',async f=>{
   const name=f.elements.name.value.trim(); if(!name) return f.elements.name.focus();
   const number=f.elements.number.value.trim(),playerId=editingPlayer;
+  const teamIds = new FormData(f).getAll('teams');
   if (playerId) {
-    if(await commit(s=>CourtPlayers.updatePlayer(s,playerId,name,number))) {
+    if(await commit(s=>CourtPlayers.updatePlayer(s,playerId,name,number,teamIds))) {
       resetPlayerForm();renderRoster();notice('Player information updated. Existing games are preserved.');
     }
     return;
   }
-  const player={id:id(),name,number},teamId=f.elements.team.value;
-  if(await commit(s=>{s.roster.push(player);if(teamId)s.teams.find(t=>t.id===teamId).playerIds.push(player.id);})) {
+  const player={id:id(),name,number};
+  if(await commit(s=>{s.roster.push(player);CourtPlayers.assignTeams(s,player.id,teamIds);})) {
     resetPlayerForm();renderRoster();notice('Player saved to reusable roster.');
   }
 });
@@ -174,7 +212,34 @@ onSaveForm('#delete-player-form',async()=>{
     notice('Player removed from the saved roster and teams. Existing games are preserved.');
   }
 });
-onSaveForm('#game-form',async f=>{
+onSaveForm('#delete-team-form', async () => {
+  const teamId = deletingTeam;
+  if (!teamId) return;
+  if (await commit(data => CourtPlayers.deleteTeam(data, teamId))) {
+    deletingTeam = null;
+    $('#delete-team-dialog').close();
+    if (editingTeam === teamId) resetTeamForm();
+    renderTeams();
+    notice('Saved team deleted. Players and existing games were kept.');
+  }
+});
+onSaveForm('#import-form', async () => {
+  const replacement = pendingImport;
+  if (!replacement) return;
+  if (await commit(data => CourtData.replaceData(data, replacement))) {
+    pendingImport = null;
+    selected = null;
+    editingPlayer = null;
+    editingTeam = null;
+    view = 'track';
+    $('#import-dialog').close();
+    $('#data-dialog').close();
+    render();
+    notice('All app data replaced successfully.');
+  }
+});
+$('#import-dialog').addEventListener('close', () => { pendingImport = null; });
+onSaveForm('#game-form' ,async f=>{
   const title=f.elements.title.value.trim(); if(!title) return f.elements.title.focus();
   const ids=new FormData(f).getAll('players'),newId=id(),date=f.elements.date.value,teamId=f.elements.team.value;
   if(await commit(s=>{s.games.unshift({id:newId,title,date,teamId:teamId || null,teamName:s.teams.find(t=>t.id===teamId)?.name || '',players:s.roster.filter(p=>ids.includes(p.id)).map(p=>({...p,stats:blank()})),history:[]});s.active=newId;})) {
@@ -207,6 +272,14 @@ document.addEventListener('click',async e=>{
     $('#delete-player-dialog .dialog-notice').textContent='';
     $('#delete-player-dialog').showModal();
   }
+  if (b.dataset.teamDelete) {
+    const team = state.teams.find(team => team.id === b.dataset.teamDelete);
+    if (!team) return;
+    deletingTeam = team.id;
+    $('#delete-team-description').textContent = `Delete ${team.name}?`;
+    $('#delete-team-dialog .dialog-notice').textContent = '';
+    $('#delete-team-dialog').showModal();
+  }
   if(b.dataset.teamEdit){resetTeamForm(state.teams.find(t=>t.id===b.dataset.teamEdit));}
   if(b.dataset.game){const gameId=b.dataset.game;if(await commit(s=>s.active=gameId)){selected=null;render();}}
   if(b.dataset.view){view=b.dataset.view;render();}
@@ -227,8 +300,56 @@ function exportCsv() {
   const g=game(); const headings=['Game','Date','Team','Player','Number',...columns.map(([,label])=>label)];
   const record=(name,number,s)=>[g.title,g.date,g.teamName || '',name,number,...columns.map(([key])=>totals(s)[key])];
   const rows=[headings,...g.players.map(p=>record(p.name,p.number,p.stats)),record('Team total','',teamStats(g))];
-  const blob=new Blob(['\uFEFF'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n')+'\r\n'],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=`${g.date}-${g.title.replace(/[^a-z0-9_-]/gi,'-')}.csv`; document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),10000); notice('CSV exported.');
+  const content = '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
+  downloadFile(`${g.date}-${g.title.replace(/[^a-z0-9_-]/gi,'-')}.csv`, content, 'text/csv;charset=utf-8;');
+  notice('CSV exported.');
 }
+function downloadFile(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+function showDataDialog() {
+  if (storageBlocked) return;
+  $('#import-data').value = '';
+  $('#data-dialog .dialog-notice').textContent = '';
+  $('#data-dialog').showModal();
+}
+async function exportAllData() {
+  await saveQueue;
+  downloadFile('courtside-data.json', CourtData.exportBackup(state), 'application/json');
+  notice('All app data exported. Share the JSON file to transfer it to another device.');
+}
+async function previewImport() {
+  const file = $('#import-data').files[0];
+  $('#import-data').value = '';
+  pendingImport = null;
+  if (!file) return;
+  $('#import-data').disabled = true;
+  try {
+    if (file.size > 20 * 1024 * 1024) throw new Error('Choose a file smaller than 20 MB.');
+    const data = CourtData.readBackup(await file.text(), validState, prepareSavedStats);
+    if (!$('#data-dialog').open) return;
+    pendingImport = data;
+    $('#import-description').textContent = `The selected file contains ${data.roster.length} players, ${data.teams.length} teams, and ${data.games.length} games.`;
+    $('#import-dialog .dialog-notice').textContent = '';
+    $('#import-dialog').showModal();
+  } catch (error) {
+    notice(`Import canceled: ${error.message}`);
+  } finally {
+    $('#import-data').disabled = false;
+  }
+}
+$('#data-button').onclick = showDataDialog;
+$('#export-data').onclick = exportAllData;
+$('#import-data').onchange = previewImport;
+
 let installPrompt;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('#install').hidden=false;});
 $('#install').onclick=async()=>{if(installPrompt){await installPrompt.prompt();installPrompt=null;$('#install').hidden=true;}};
