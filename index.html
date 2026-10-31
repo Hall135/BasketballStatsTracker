@@ -9,11 +9,12 @@
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" href="./assets/icon-192.png">
     <link rel="apple-touch-icon" href="./assets/icon-192.png">
-    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./css/styles.css">
     <title>Courtside · Basketball Tracker</title>
-    <script src="./stats.js" defer></script>
-    <script src="./storage.js" defer></script>
-    <script src="./app.js" defer></script>
+    <script src="./js/stats.js" defer></script>
+    <script src="./js/storage.js" defer></script>
+    <script src="./js/playerManager.js" defer></script>
+    <script src="./js/app.js" defer></script>
 </head>
 
 <body>
@@ -71,13 +72,24 @@
                 <h2>Player roster</h2>
             </div><button class="close" data-close aria-label="Close">×</button>
         </div>
-        <form id="player-form"><label>Player name<input name="name" required maxlength="60"
+        <form id="player-form"><h3 id="player-form-title">Add a player</h3><label>Player name<input name="name" required maxlength="60"
                     placeholder="Player name"></label><label>Add to team <span class="muted">(optional)</span><select
                     name="team" id="player-team"></select></label><label>Jersey number <span
                     class="muted">(optional)</span><input name="number" maxlength="3" inputmode="numeric"
                     pattern="[0-9]{1,3}" placeholder="23"></label><button class="primary" type="submit">＋ Save
-                player</button></form>
+                player</button><button type="button" id="player-cancel" hidden>Cancel edit</button></form>
+        <p class="small muted">Player edits apply to future games and future roster additions. Existing games keep their original information and statistics.</p>
+        <p class="dialog-notice small" role="status" aria-live="polite"></p>
         <div id="roster-list"></div>
+    </dialog>
+    <dialog id="delete-player-dialog" aria-labelledby="delete-player-title">
+        <form id="delete-player-form">
+            <div class="dialog-heading"><h2 id="delete-player-title">Delete player?</h2><button type="button" class="close" data-close aria-label="Close">×</button></div>
+            <p id="delete-player-description"></p>
+            <p class="muted small">This removes the player from your saved roster and all saved teams. Existing games, player statistics, and game undo history will be kept. Deletion cannot be undone; recreating a player creates a new record.</p>
+            <p class="dialog-notice small" role="status" aria-live="polite"></p>
+            <div class="team-actions"><button type="button" data-close autofocus>Cancel</button><button class="danger" type="submit">Delete player</button></div>
+        </form>
     </dialog>
     <dialog id="add-dialog">
         <form id="add-form">
