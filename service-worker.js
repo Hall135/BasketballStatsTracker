@@ -1,7 +1,7 @@
 // Adapted from the service worker supplied with this project.
 const CACHE_PREFIX = 'courtside-cache-';
-const CACHE_NAME = CACHE_PREFIX + 'v4';
-const FILES_TO_CACHE = [ './', './index.html', './manifest.json', './assets/icon-192.png', './assets/icon-512.png', './js/stats.js', './js/storage.js', './js/playerManager.js', './js/app.js', './css/styles.css' ];
+const CACHE_NAME = CACHE_PREFIX + 'v8';
+const FILES_TO_CACHE = [ './', './index.html', './manifest.json', './assets/icon-192.png', './assets/icon-512.png', './js/stats.js', './js/storage.js', './js/playerManager.js', './js/dataTransfer.js', './js/app.js', './css/styles.css' ];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(FILES_TO_CACHE)).then(() => self.skipWaiting()));
 });
