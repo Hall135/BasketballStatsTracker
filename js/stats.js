@@ -4,8 +4,8 @@
     ['twoMade', '2PT Made', '2', 'made'], ['twoMissed', '2PT Missed', '2', 'missed'],
     ['threeMade', '3PT Made', '3', 'made'], ['threeMissed', '3PT Missed', '3', 'missed'],
     ['ftMade', 'FT Made', '1', 'made'], ['ftMissed', 'FT Missed', '1', 'missed'],
-    ['assists', 'Assists', '↗', 'other'], ['defReb', 'Def. rebounds', '↓', 'other'],
-    ['offReb', 'Off. rebounds', '↑', 'other'], ['steals', 'Steals', '✦', 'other'],
+    ['assists', 'Assists', '↗', 'other'], ['defReb', 'Def. Rebounds', '↓', 'other'],
+    ['offReb', 'Off. Rebounds', '↑', 'other'], ['steals', 'Steals', '✦', 'other'],
     ['blocks', 'Blocks (BLK)', '⊥', 'other'], ['turnovers', 'Turnovers (TOV)', '⇄', 'other']
   ];
   const blank = () => Object.fromEntries(fields.map(([key]) => [key, 0]));

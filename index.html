@@ -15,6 +15,8 @@
     <script src="./js/storage.js" defer></script>
     <script src="./js/playerManager.js" defer></script>
     <script src="./js/dataTransfer.js" defer></script>
+    <script src="./js/gameManager.js" defer></script>
+    <script src="./js/rosterTransfer.js" defer></script>
     <script src="./js/app.js" defer></script>
 </head>
 
@@ -22,24 +24,24 @@
     <header class="topbar"><a class="brand" href="./"><span class="ball">◉</span> COURTSIDE <span
                 class="brand-note">BASKETBALL TRACKER</span></a>
         <div class="status"><span id="offline-status">Loading saved data…</span><button id="install" hidden>Install
-                app</button></div>
+                App</button></div>
     </header>
     <main>
         <div class="page-intro">
             <div>
                 <p class="eyebrow">EVERY PLAY COUNTS</p>
-                <h1>Your game. On record.</h1>
+                <h1>Your Game. On Record.</h1>
                 <p class="muted">Tap a player. Log the play. Stay with the game.</p>
-            </div><button class="primary" id="new-game">＋ New game</button>
+            </div><button class="primary" id="new-game">＋ New Game</button>
         </div>
         <div class="workspace">
             <aside>
                 <div class="section-heading">
                     <h2>Games</h2><span id="game-count" class="badge">0</span>
                 </div>
-                <div id="games"></div><button id="teams-button" class="roster-button">♜ Manage teams</button><button
-                    id="roster-button" class="roster-button">♟ Manage player roster</button>
-                <button id="data-button" class="roster-button">⇄ Share / restore data</button>
+                <div id="games"></div><button id="teams-button" class="roster-button">♜ Manage Teams</button><button
+                    id="roster-button" class="roster-button">♟ Manage Player Roster</button>
+                <button id="data-button" class="roster-button">⇄ Share / Restore Data</button>
             </aside>
             <section id="game-area" aria-label="Selected game"></section>
         </div>
@@ -50,98 +52,134 @@
             <div class="dialog-heading">
                 <div>
                     <p class="eyebrow">TIP-OFF</p>
-                    <h2>Create a game</h2>
+                    <h2>Create A Game</h2>
                 </div><button type="button" class="close" data-close aria-label="Close">×</button>
-            </div><label>Game name<input name="title" required maxlength="80"
-                    placeholder="e.g. Tigers vs. Eagles"></label><label>Game date<input name="date" type="date"
-                    required></label><label>Saved team <span class="muted">(optional)</span><select name="team"
+            </div><label>Game Name<input name="title" required maxlength="80"
+                    placeholder="e.g. Tigers vs. Eagles"></label><label>Game Date<input name="date" type="date"
+                    required></label><label>Saved Team <span class="muted">(optional)</span><select name="team"
                     id="game-team"></select></label>
             <fieldset>
-                <legend>Select players</legend>
+                <legend>Select Players</legend>
                 <div id="game-player-options"></div>
             </fieldset>
             <p class="muted small">Selecting a team checks its players. Add or uncheck individual players as needed.</p>
-            <button class="primary" type="submit">Create game</button>
+            <button class="primary" type="submit">Create Game</button>
+        </form>
+    </dialog>
+    <dialog id="game-details-dialog" aria-labelledby="game-details-title">
+        <form id="game-details-form">
+            <div class="dialog-heading"><h2 id="game-details-title">Edit Game Details</h2><button type="button" class="close" data-close aria-label="Close">×</button></div>
+            <label>Game Name<input name="title" required maxlength="80"></label>
+            <label>Game Date<input name="date" type="date" required></label>
+            <p class="small muted">Changes apply to this game's name and date. Players, statistics, and undo history are kept.</p>
+            <p class="dialog-notice small" role="status" aria-live="polite"></p>
+            <button type="submit" class="primary">Save Game Changes</button>
+        </form>
+    </dialog>
+    <dialog id="delete-game-dialog" aria-labelledby="delete-game-title">
+        <form id="delete-game-form">
+            <div class="dialog-heading"><h2 id="delete-game-title">Delete Game?</h2><button type="button" class="close" data-close aria-label="Close">×</button></div>
+            <p id="delete-game-description"></p>
+            <p class="small muted">This permanently deletes the game, its player statistics, and its undo history. Saved Teams and individual players will be kept. Game deletion cannot be undone.</p>
+            <p class="dialog-notice small" role="status" aria-live="polite"></p>
+            <div class="team-actions"><button type="button" data-close autofocus>Cancel</button><button type="submit" class="danger">Delete Game</button></div>
         </form>
     </dialog>
     <dialog id="roster-dialog">
         <div class="dialog-heading">
             <div>
                 <p class="eyebrow">YOUR TEAM</p>
-                <h2>Player roster</h2>
+                <h2>Player Roster</h2>
             </div><button class="close" data-close aria-label="Close">×</button>
         </div>
-        <form id="player-form"><h3 id="player-form-title">Add a player</h3><label>Player name<input name="name" required maxlength="60"
-                    placeholder="Player name"></label><fieldset><legend>Assigned teams (optional)</legend><div id="player-teams"></div></fieldset><p class="small muted">Select any number of teams, or leave all unchecked.</p><label>Jersey number <span
+        <form id="player-form"><h3 id="player-form-title">Add A Player</h3><label>Player Name<input name="name" required maxlength="60"
+                    placeholder="Player Name"></label><fieldset><legend>Assigned Teams (Optional)</legend><div id="player-teams"></div></fieldset><p class="small muted">Select any number of teams, or leave all unchecked.</p><label>Jersey Number <span
                     class="muted">(optional)</span><input name="number" maxlength="3" inputmode="numeric"
                     pattern="[0-9]{1,3}" placeholder="23"></label><button class="primary" type="submit">＋ Save
-                player</button><button type="button" id="player-cancel" hidden>Cancel edit</button></form>
+                Player</button><button type="button" id="player-cancel" hidden>Cancel Edit</button></form>
         <p class="small muted">Player edits apply to future games and future roster additions. Existing games keep their original information and statistics.</p>
         <p class="dialog-notice small" role="status" aria-live="polite"></p>
         <div id="roster-list"></div>
     </dialog>
     <dialog id="delete-player-dialog" aria-labelledby="delete-player-title">
         <form id="delete-player-form">
-            <div class="dialog-heading"><h2 id="delete-player-title">Delete player?</h2><button type="button" class="close" data-close aria-label="Close">×</button></div>
+            <div class="dialog-heading"><h2 id="delete-player-title">Delete Player?</h2><button type="button" class="close" data-close aria-label="Close">×</button></div>
             <p id="delete-player-description"></p>
             <p class="muted small">This removes the player from your saved roster and all saved teams. Existing games, player statistics, and game undo history will be kept. Deletion cannot be undone; recreating a player creates a new record.</p>
             <p class="dialog-notice small" role="status" aria-live="polite"></p>
-            <div class="team-actions"><button type="button" data-close autofocus>Cancel</button><button class="danger" type="submit">Delete player</button></div>
+            <div class="team-actions"><button type="button" data-close autofocus>Cancel</button><button class="danger" type="submit">Delete Player</button></div>
         </form>
     </dialog>
     <dialog id="add-dialog">
         <form id="add-form">
             <div class="dialog-heading">
-                <h2>Add players to game</h2><button type="button" class="close" data-close aria-label="Close">×</button>
-            </div><label>Include saved team <span class="muted">(optional)</span><select id="add-team"></select></label>
-            <div id="add-options"></div><button class="primary" type="submit">Add selected players</button>
+                <h2>Add Players To Game</h2><button type="button" class="close" data-close aria-label="Close">×</button>
+            </div><label>Include Saved Team <span class="muted">(optional)</span><select id="add-team"></select></label>
+            <div id="add-options"></div><button class="primary" type="submit">Add Selected Players</button>
         </form>
     </dialog>
     <dialog id="teams-dialog">
         <div class="dialog-heading">
             <div>
                 <p class="eyebrow">YOUR TEAMS</p>
-                <h2>Saved teams</h2>
+                <h2>Saved Teams</h2>
             </div><button class="close" data-close aria-label="Close">×</button>
         </div>
         <div id="teams-list"></div>
         <form id="team-form">
-            <h3 id="team-form-title">Create a team</h3><label>Team name<input name="name" required maxlength="80"
+            <h3 id="team-form-title">Create A Team</h3><label>Team Name<input name="name" required maxlength="80"
                     placeholder="e.g. Tigers varsity"></label>
             <fieldset>
-                <legend>Team players</legend>
+                <legend>Team Players</legend>
                 <div id="team-player-options"></div>
             </fieldset>
             <p class="muted small">Players can belong to multiple teams. Add new individuals in Manage player roster.
             </p>
-            <div class="team-actions"><button class="primary" type="submit">Save team</button><button type="button"
-                    id="team-new">New team</button></div>
+            <div class="team-actions"><button class="primary" type="submit">Save Team</button><button type="button"
+                    id="team-new">New Team</button></div>
         </form>
     </dialog>
     <dialog id="delete-team-dialog" aria-labelledby="delete-team-title">
         <form id="delete-team-form">
-            <div class="dialog-heading"><h2 id="delete-team-title">Delete team?</h2><button type="button" class="close" data-close aria-label="Close">×</button></div>
+            <div class="dialog-heading"><h2 id="delete-team-title">Delete Team?</h2><button type="button" class="close" data-close aria-label="Close">×</button></div>
             <p id="delete-team-description"></p>
             <p class="muted small">The saved team will be removed. Individual players and existing games, including their original team names and statistics, will be kept. Team deletion cannot be undone.</p>
             <p class="dialog-notice small" role="status" aria-live="polite"></p>
-            <div class="team-actions"><button type="button" data-close autofocus>Cancel</button><button class="danger" type="submit">Delete team</button></div>
+            <div class="team-actions"><button type="button" data-close autofocus>Cancel</button><button class="danger" type="submit">Delete Team</button></div>
         </form>
     </dialog>
     <dialog id="data-dialog" aria-labelledby="data-title">
-        <div class="dialog-heading"><h2 id="data-title">Share / restore data</h2><button class="close" data-close aria-label="Close">×</button></div>
+        <div class="dialog-heading"><h2 id="data-title">Share / Restore Data</h2><button class="close" data-close aria-label="Close">×</button></div>
+        <h3>All App Data</h3>
         <p class="small muted">Export a JSON file with all teams, players, games, statistics, and undo history. Share it with another person or device, then import it there.</p>
-        <button id="export-data" class="primary">Export all data (JSON)</button>
-        <label class="import-label">Import Courtside JSON file<input id="import-data" type="file" accept=".json,application/json"></label>
+        <button id="export-data" class="primary">Export All Data (JSON)</button>
+        <label class="import-label">Import Courtside JSON File<input id="import-data" type="file" accept=".json,application/json"></label>
         <p class="small muted">Import replaces all current app data after validation and confirmation. Export your current data first if you want to keep a copy. Maximum file size: 20 MB.</p>
+        <section class="roster-transfer" aria-labelledby="roster-transfer-title">
+            <h3 id="roster-transfer-title">Teams And Players Only</h3>
+            <p class="small muted">JSON keeps IDs and replaces only saved teams and players. CSV has Team, Player, Number columns and appends memberships, matching existing names and numbers. Blank jersey numbers are allowed. Both options keep existing games.</p>
+            <div class="team-actions"><button id="export-roster-json">Export Roster JSON</button><button id="export-roster-csv">Export Roster CSV</button></div>
+            <label class="import-label">Import Teams And Players<input id="import-roster" type="file" accept=".json,.csv,application/json,text/csv"></label>
+            <p class="small muted">Maximum file size: 20 MB. Review and confirm the import before saving.</p>
+        </section>
         <p class="dialog-notice small" role="status" aria-live="polite"></p>
+    </dialog>
+    <dialog id="roster-import-dialog" aria-labelledby="roster-import-title">
+        <form id="roster-import-form">
+            <div class="dialog-heading"><h2 id="roster-import-title">Import Teams And Players</h2><button type="button" class="close" data-close aria-label="Close">×</button></div>
+            <p id="roster-import-description"></p>
+            <p id="roster-import-effect" class="small muted"></p>
+            <p class="dialog-notice small" role="status" aria-live="polite"></p>
+            <div class="team-actions"><button type="button" data-close autofocus>Cancel</button><button id="confirm-roster-import" type="submit">Import Teams And Players</button></div>
+        </form>
     </dialog>
     <dialog id="import-dialog" aria-labelledby="import-title">
         <form id="import-form">
-            <div class="dialog-heading"><h2 id="import-title">Replace all app data?</h2><button type="button" class="close" data-close aria-label="Close">×</button></div>
+            <div class="dialog-heading"><h2 id="import-title">Replace All App Data?</h2><button type="button" class="close" data-close aria-label="Close">×</button></div>
             <p id="import-description"></p>
             <p class="small muted">This will replace every saved player, team, game, statistic, and undo record on this device. It does not merge records and cannot be undone through the app. The imported data stays local.</p>
             <p class="dialog-notice small" role="status" aria-live="polite"></p>
-            <div class="team-actions"><button type="button" data-close autofocus>Cancel</button><button type="submit" class="danger">Replace all data</button></div>
+            <div class="team-actions"><button type="button" data-close autofocus>Cancel</button><button type="submit" class="danger">Replace All Data</button></div>
         </form>
     </dialog>
     <dialog id="edit-dialog">
@@ -149,12 +187,12 @@
             <div class="dialog-heading">
                 <div>
                     <p class="eyebrow">CORRECT THE RECORD</p>
-                    <h2 id="edit-title">Edit statistics</h2>
+                    <h2 id="edit-title">Edit Statistics</h2>
                 </div><button type="button" class="close" data-close aria-label="Close">×</button>
             </div>
             <p class="muted small">Edit play counts below. Points and shooting totals update automatically.</p>
             <div id="edit-fields" class="edit-grid"></div><button class="primary" type="submit">Save
-                corrections</button>
+                Corrections</button>
         </form>
     </dialog>
     <noscript>This app requires JavaScript to record and save statistics.</noscript>
