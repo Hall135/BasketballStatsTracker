@@ -17,7 +17,7 @@ The application uses:
 
 - Add individual players with a name and an optional one-to-three-digit jersey number.
 - Assign new or existing players to multiple saved teams, one team, or no teams using checkboxes.
-- Edit saved player names and jersey numbers through **Manage player roster → Edit**.
+- Edit saved player names and jersey numbers through **Manage Player Roster → Edit**.
 - Change team assignments while editing; uncheck every team to remove all assignments.
 - Cancel an edit to return to the add-player form.
 - Delete a saved player after an explicit confirmation.
@@ -31,6 +31,8 @@ The application uses:
 - Edit team names and player membership; a player may belong to multiple teams.
 - Delete a saved team after confirmation while keeping individual players and existing games.
 - Create games with a name and date.
+- Use **Edit Game** to change a saved game name/date without altering its players, statistics, or undo history.
+- Use **Delete Game** to permanently remove that game, its statistics, and its undo history after confirmation. Saved teams and players remain. Deleting the selected game opens the next saved game, or the empty state if none remain.
 - Select a saved team to check its players, then add or uncheck individual players.
 - Create games without selecting a team.
 - Add individual players or a saved team's players to an existing game without duplicating player IDs.
@@ -63,6 +65,10 @@ PTS, REB, AST, STL, BLK, FG%, 3P%, FT%, TOV
 - Export one CSV for the selected game, including game, date, team, player, jersey number, player results, and a team-total row.
 - Quote CSV values and protect user-supplied names from spreadsheet formula interpretation.
 - Display FG%, 3P%, and FT% automatically to one decimal place. Leave percentage cells blank when there are no attempts.
+- Export saved teams and players as JSON with IDs or simplified CSV without IDs.
+- Import roster JSON as a full replacement of saved teams and players while keeping existing games.
+- Import roster CSV by appending teams, players, and memberships, reusing matching records.
+- Use Title Case for app-provided buttons and headers; user-entered names and titles retain their capitalization.
 - Export/import a portable JSON file containing all app records to transfer data between people and devices. Imports validate the file, show record counts, and replace all current records only after confirmation.
 
 ### Offline/PWA behavior
@@ -92,11 +98,14 @@ Basketball Tracker App/
 ├── js/
 │   ├── app.js
 │   ├── dataTransfer.js
+│   ├── gameManager.js
 │   ├── playerManager.js
+│   ├── rosterTransfer.js
 │   ├── stats.js
 │   └── storage.js
 └── tests/
-    └── run-tests.cjs
+    ├── run-tests.cjs
+    └── roster-games-tests.cjs
 ```
 
 The project folder remains **Basketball Tracker App**. No package installation or build configuration is needed. The deferred JavaScript files share browser globals.
@@ -151,6 +160,8 @@ All assets used by the app are included in this folder. `index.html` loads:
 ./js/storage.js
 ./js/playerManager.js
 ./js/dataTransfer.js
+./js/gameManager.js
+./js/rosterTransfer.js
 ./js/app.js
 ```
 
@@ -179,14 +190,43 @@ No account or cloud synchronization is used. Data remains in that browser and or
 
 ### Share or restore all app data
 
-1. Open **Share / restore data**, then select **Export all data (JSON)**. The download is `courtside-data.json`.
+1. Open **Share / Restore Data**, then select **Export All Data (JSON)**. The download is `courtside-data.json`.
 2. Send the file to the other person/device using your preferred file-sharing method. The app itself does not upload it.
-3. On the destination device, open **Share / restore data** and choose that JSON file under **Import Courtside JSON file**.
-4. Review the player, team, and game counts. Select **Replace all data** to replace the destination's complete data set, or **Cancel** to keep its current records.
+3. On the destination device, open **Share / Restore Data** and choose that JSON file under **Import Courtside JSON File**.
+4. Review the player, team, and game counts. Select **Replace All Data** to replace the destination's complete data set, or **Cancel** to keep its current records.
 
 Export the destination's current data first if you want to keep it. Import replaces records rather than merging them. There is no automatic synchronization: later changes on one device are not copied to the other device until another export/import.
 
-Only Courtside JSON files with format `courtside-backup` and version `1` are accepted. The file includes an export timestamp and the application data. Validation rejects duplicate IDs, invalid numbers/dates, missing player/team references, broken undo references, and an invalid active game. A game may retain the snapshot of a team or player that has since been deleted from the saved roster. The maximum import file size is 20 MB. Invalid files, canceled imports, and failed database writes keep the destination's previous records. CSV files cannot be imported.
+Only Courtside JSON files with format `courtside-backup` and version `1` are accepted. The file includes an export timestamp and the application data. Validation rejects duplicate IDs, invalid numbers/dates, missing player/team references, broken undo references, and an invalid active game. A game may retain the snapshot of a team or player that has since been deleted from the saved roster. The maximum import file size is 20 MB. Invalid files, canceled imports, and failed database writes keep the destination's previous records. Game-results CSV files cannot be imported. The separate teams/players CSV format below can be imported.
+
+### Share Teams And Players Only
+
+Open **Share / Restore Data → Teams And Players Only**. These controls are separate from **All App Data**:
+
+- **Export Roster JSON** downloads `courtside-roster.json`. It contains only saved teams, individual players, and memberships, with their original IDs. The format is `courtside-roster`, version `1`.
+- **Export Roster CSV** downloads `courtside-roster.csv`. It contains no IDs and uses `Team,Player,Number` columns in that order.
+- **Import Teams And Players** accepts one roster JSON or CSV file (up to 20 MB). Review the confirmation before saving. Invalid files or canceled imports leave all current records intact.
+
+Roster JSON **replaces all saved teams and individual players**, preserving imported IDs. It does not replace existing games, active-game selection, statistics, or undo history. Duplicate IDs within the imported roster, duplicate memberships, and unknown player references are rejected. Full-app JSON files belong in the separate full-app importer.
+
+A game keeps its own player IDs, names, numbers, and statistics. An imported player with the same ID is treated as the same identity when adding players to that game, but the game retains its original player snapshot. Imported matching IDs never rename or overwrite historical statistics. Import JSON from a trusted roster source when preserving identities is important.
+
+Roster CSV **appends** records and memberships. It reuses an existing team when its name matches, ignoring capitalization and surrounding spaces. Players match by both name and jersey number, also ignoring capitalization and surrounding spaces. Blank numbers are allowed and match only other blank numbers; they are not wildcards. Missing players and teams receive new IDs. Existing matches keep their saved spelling and capitalization; newly created names keep the imported capitalization after trimming surrounding spaces. Repeated rows/imports do not duplicate memberships. If several existing records already share a matching name/number or team name, the first match is reused.
+
+Example:
+
+```csv
+Team,Player,Number
+Tigers,Jordan,23
+Tigers,Riley,
+Eagles,Jordan,23
+,Casey,7
+Empty Team,,
+```
+
+This puts Jordan on two teams, allows Riley to have no number, leaves Casey unassigned, and creates an empty team. A blank Player is allowed only for a team-only row with a blank Number. Completely blank records are skipped. The header is required; its capitalization/surrounding spaces may vary. Quote names containing commas, quotes, or line breaks using standard CSV quoting. Exported formula-like names are escaped for spreadsheet safety and restored by the roster importer.
+
+Both roster import types preserve existing games. JSON replacement cannot be undone; export the destination roster first if you want a copy. CSV import adds records and memberships only and does not remove existing assignments.
 
 ---
 
@@ -216,7 +256,7 @@ Editing a saved player updates the reusable roster entry while keeping its ID an
 
 Deleting a team removes only the saved team; its players remain in the reusable roster, and existing games retain their team name and statistics.
 
-Player deletion, team deletion, and data replacement cannot be undone through the app. **Undo last action** applies to recorded game plays and statistic corrections, not player management.
+Player deletion, team deletion, game deletion, and replacement imports cannot be undone through the app. **Undo Last Action** applies to recorded game plays and statistic corrections, not player/team management or changes to game names/dates.
 
 ---
 
@@ -225,7 +265,7 @@ Player deletion, team deletion, and data replacement cannot be undone through th
 When changing pre-cached files, increment the cache version in `service-worker.js`:
 
 ```js
-const CACHE_NAME = CACHE_PREFIX + 'v8';
+const CACHE_NAME = CACHE_PREFIX + 'v10';
 ```
 
 Publish all changed files together, including the current service worker. Refresh while connected to install the update. The app reloads when a newly installed worker takes control. If an older version remains visible, close and reopen the app or reload again while connected.
@@ -242,9 +282,9 @@ With Node.js installed, run:
 node tests/run-tests.cjs
 ```
 
-No package dependencies are needed. The checks cover JavaScript syntax, scoring calculations, BLK/TOV defaults in existing records and undo snapshots, column order, CSV output, serialized saves, failed-write rollback, player editing/deletion without historical changes, multiple/no team assignments, team deletion, weighted percentages, JSON round-trips, invalid-file rejection, and atomic replacement failures.
+No package dependencies are needed. The checks cover JavaScript syntax, scoring calculations, BLK/TOV defaults in existing records and undo snapshots, column order, CSV output, serialized saves, failed-write rollback, player editing/deletion without historical changes, multiple/no team assignments, team deletion, weighted percentages, JSON round-trips, invalid-file rejection, atomic replacement failures, game editing/deletion, roster-only ID conflicts, CSV parsing/round-trips, duplicate handling, and roster JSON replacement.
 
-For browser verification, check player creation/editing, canceling edits/deletion/import, team membership and reassignment, team deletion confirmation, JSON transfer, existing-game preservation, recording/undo, box scores, exports, reload persistence, phone layout, and loading after the local server is stopped.
+For browser verification, check player creation/editing, canceling edits/deletion/import, team membership and reassignment, team/game deletion confirmations, game details editing, full-app and roster JSON transfer, roster CSV import/export, existing-game preservation, recording/undo, box scores, exports, reload persistence, phone layout, and loading after the local server is stopped.
 
 ---
 
@@ -254,7 +294,7 @@ For browser verification, check player creation/editing, canceling edits/deletio
 
 ### `index.html`
 
-Defines the scoring workspace and dialogs for games, players, teams, statistic corrections, deletion confirmations, and JSON export/import. Loads the stylesheet and five scripts using relative paths. Scripts execute in the order listed above.
+Defines the scoring workspace and dialogs for games, players, teams, statistic corrections, deletion confirmations, and JSON/CSV roster transfer. Loads the stylesheet and seven scripts using relative paths. Scripts execute in the order listed above.
 
 ### `manifest.json`
 
@@ -286,7 +326,7 @@ Defines the green/cream visual design, responsive workspace, player jerseys, sta
 
 ## JavaScript Files
 
-These are deferred browser scripts. `stats.js`, `storage.js`, and `playerManager.js`, and `dataTransfer.js` expose `CourtStats`, `CourtStorage`, `CourtPlayers`, and `CourtData` respectively; `app.js` coordinates them.
+These are deferred browser scripts. `stats.js`, `storage.js`, `playerManager.js`, `dataTransfer.js`, `gameManager.js`, and `rosterTransfer.js` expose `CourtStats`, `CourtStorage`, `CourtPlayers`, `CourtData`, `CourtGames`, and `CourtRoster` respectively; `app.js` coordinates them.
 
 ### `js/stats.js`
 
@@ -309,6 +349,22 @@ These are deferred browser scripts. `stats.js`, `storage.js`, and `playerManager
 - `exportBackup(data)` — Serializes complete app data in the versioned Courtside JSON format with an export timestamp.
 - `readBackup(text, validate, prepare)` — Parses the supported JSON format, adds compatible missing-stat defaults, and validates all records/references before returning replacement data.
 - `replaceData(target, replacement)` — Copies the four app state fields into a save draft; local database revision tracking remains on the destination device.
+
+### `js/gameManager.js`
+
+- `updateGame(data, gameId, title, date)` — Validates and updates only the selected game's name/date, preserving its ID and historical records.
+- `deleteGame(data, gameId)` — Removes that game's complete record and selects another game or the empty state if necessary. Reusable teams/players remain.
+
+### `js/rosterTransfer.js`
+
+- `exportJson(data)` — Serializes saved teams/players with IDs in the versioned roster-only format.
+- `readJson(text, validate)` — Validates a roster-only JSON file, including unique IDs and valid memberships.
+- `replaceRoster(target, roster)` — Replaces only the saved roster and teams in a draft, preserving game snapshots and active selection.
+- `csvCell(value)` — Quotes CSV text and reversibly escapes formula-like names and leading apostrophes.
+- `exportCsv(data)` — Creates ID-free membership rows, unassigned-player rows, and empty-team rows.
+- `parseCsv(text)` — Reads BOM/CRLF/LF CSV, escaped quotes, commas, and multiline cells; rejects malformed quoting.
+- `readCsv(text)` — Checks the three-column header and validates every row before any changes are saved.
+- `appendCsv(data, rows, newId)` — Matches existing teams/players, creates missing records, and appends only new memberships. Returns added-record counts.
 
 ### `js/storage.js`
 
@@ -356,16 +412,22 @@ Functions and helpers:
 - `showDataDialog()` — Opens the sharing controls with a clear file selection and status.
 - `exportAllData()` — Waits for pending saves and downloads the full JSON file.
 - `previewImport()` — Reads a selected file, checks its size/format/records, and displays counts before replacement confirmation.
+- `exportRoster(type)` — Waits for pending saves, then downloads teams/players as JSON or CSV.
+- `previewRosterImport()` — Validates the chosen roster file and opens the appropriate replacement/append confirmation.
 - `connectionStatus()` — Updates the online/offline storage label.
 - `initialize()` — Loads/validates IndexedDB data before enabling management controls.
 
-Event handlers connect these helpers to player creation/edit/deletion, deletion confirmation, team creation/editing/deletion, JSON export and confirmed replacement import, game creation, adding game players, statistic corrections, player selection, tracking, undo, exports, installation, connection changes, and service-worker updates. Player and game saves use the same atomic commit queue.
+Event handlers connect these helpers to player creation/edit/deletion, deletion confirmation, team creation/editing/deletion, JSON export and confirmed replacement import, game creation/editing/deletion, roster JSON replacement and CSV appending, adding game players, statistic corrections, player selection, tracking, undo, exports, installation, connection changes, and service-worker updates. Player and game saves use the same atomic commit queue.
 
 ## Tests
 
 ### `tests/run-tests.cjs`
 
 Dependency-free Node.js regression checks using built-in assertions and VM contexts. It exercises the app's source functions with isolated fixtures and mock save failures; it does not modify browser data.
+
+### `tests/roster-games-tests.cjs`
+
+Additional isolated regression fixtures for game editing/deletion, roster JSON identity conflicts, historical snapshots, CSV matching/repeated import, optional jersey numbers, empty teams, unassigned players, quoted/multiline names, and invalid CSV/JSON rejection. Included by the main test runner.
 
 ## Source Style
 

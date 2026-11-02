@@ -4,7 +4,8 @@ const $ = selector => document.querySelector(selector);
 let state = { roster: [], teams: [], games: [], active: null }, selected = null, view = 'track', editing = null, editingTeam = null, storageBlocked = true, revision = 0;
 let saveQueue = Promise.resolve();
 let editingPlayer = null, deletingPlayer = null, deletingTeam = null;
-let pendingImport = null;
+let pendingImport = null, pendingRosterImport = null;
+let editingGame = null, deletingGame = null;
 const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const id = () => crypto.randomUUID();
 const game = () => state.games.find(g => g.id === state.active);
@@ -94,40 +95,40 @@ function teamStats(g) { return g.players.reduce((all,p) => { fields.forEach(([k]
 const teamColumns = [['points','PTS','Points'],['rebounds','REB','Total rebounds'],['assists','AST','Assists'],['steals','STL','Steals'],['blocks','BLK','Blocks'],['fgPct','FG%','Field goal percentage'],['threePct','3P%','Three-point percentage'],['ftPct','FT%','Free throw percentage'],['turnovers','TOV','Turnovers']];
 function render() {
   $('#game-count').textContent = state.games.length;
-  $('#games').innerHTML = state.games.length ? state.games.map(g => `<button class="game-item ${g.id === state.active ? 'active' : ''}" data-game="${esc(g.id)}"><span>${esc(g.title)}</span><small>${esc(dateText(g.date))} · ${g.players.length} players</small></button>`).join('') : '<p class="empty-small">Your games will appear here.</p>';
+  $('#games').innerHTML = state.games.length ? state.games.map(g => `<button class="game-item ${g.id === state.active ? 'active' : ''}" data-game="${esc(g.id)}"><span>${esc(g.title)}</span><small>${esc(dateText(g.date))} · ${g.players.length} Players</small></button>`).join('') : '<p class="empty-small">Your games will appear here.</p>';
   const g = game();
-  if (!g) { $('#game-area').innerHTML = '<div class="empty"><div class="court-icon">◉</div><p class="eyebrow">READY WHEN YOU ARE</p><h2>Start at the sidelines.</h2><p>Create a game and choose your players<br>to start tracking every play.</p><button class="primary" data-new>＋ Create your first game</button></div>'; return; }
+  if (!g) { $('#game-area').innerHTML = '<div class="empty"><div class="court-icon">◉</div><p class="eyebrow">READY WHEN YOU ARE</p><h2>Start At The Sidelines.</h2><p>Create a game and choose your players<br>to start tracking every play.</p><button class="primary" data-new>＋ Create Your First Game</button></div>'; return; }
   if (!g.players.some(p => p.id === selected)) selected = null;
   const t = totals(teamStats(g));
-  $('#game-area').innerHTML = `<div class="game-heading"><div><p class="eyebrow">${esc(dateText(g.date))}</p><h2>${esc(g.title)}</h2>${g.teamName ? `<p class="game-team-label">${esc(g.teamName)}</p>` : ''}</div><button data-export>↓ Export CSV</button></div>
-  <div class="scoreboard" aria-label="Team statistics">${teamColumns.map(([key,label,title],i)=>`<div${i===0 ? ' class="score-main"' : ''}><span title="${title}">${label}</span><strong>${t[key]}</strong></div>`).join('')}</div>
-  <div class="toolbar"><div class="tabs" role="group" aria-label="Game view"><button data-view="track" aria-pressed="${view === 'track'}" class="${view === 'track' ? 'chosen' : ''}">◉ Track plays</button><button data-view="table" aria-pressed="${view === 'table'}" class="${view === 'table' ? 'chosen' : ''}">▤ Box score</button></div><button data-undo ${g.history.length ? '' : 'disabled'}>↶ Undo last action</button></div>
+  $('#game-area').innerHTML = `<div class="game-heading"><div><p class="eyebrow">${esc(dateText(g.date))}</p><h2>${esc(g.title)}</h2>${g.teamName ? `<p class="game-team-label">${esc(g.teamName)}</p>` : ''}</div><div class="game-actions"><button data-game-details>Edit Game</button><button class="danger" data-game-delete>Delete Game</button><button data-export>↓ Export CSV</button></div></div>
+  <div class="scoreboard" aria-label="Team Statistics">${teamColumns.map(([key,label,title],i)=>`<div${i===0 ? ' class="score-main"' : ''}><span title="${title}">${label}</span><strong>${t[key]}</strong></div>`).join('')}</div>
+  <div class="toolbar"><div class="tabs" role="group" aria-label="Game View"><button data-view="track" aria-pressed="${view === 'track'}" class="${view === 'track' ? 'chosen' : ''}">◉ Track Plays</button><button data-view="table" aria-pressed="${view === 'table'}" class="${view === 'table' ? 'chosen' : ''}">▤ Box Score</button></div><button data-undo ${g.history.length ? '' : 'disabled'}>↶ Undo Last Action</button></div>
   ${view === 'track' ? trackMarkup(g) : tableMarkup(g)}
   <div class="activity"><span class="dot"></span><span>${g.history.length ? esc(g.history[g.history.length - 1].label) : 'Ready to record. Select a player to begin.'}</span><small>Saved locally</small></div>`;
 }
 function trackMarkup(g) {
   const p = g.players.find(p => p.id === selected);
-  return `<div class="section-heading"><h3>On the roster <span class="muted">/ ${g.players.length}</span></h3><button data-add>＋ Add players</button></div><div class="players">${g.players.map(p => `<button class="player ${p.id === selected ? 'selected' : ''}" data-player="${esc(p.id)}" aria-pressed="${p.id === selected}"><span class="jersey">${esc(p.number || p.name.split(/\s+/).map(n=>n[0]).join('').slice(0,2).toUpperCase())}</span><span class="player-name">${esc(p.name)}</span><span class="player-points">${totals(p.stats).points} <small>PTS</small></span></button>`).join('')}</div>
-  ${p ? `<div class="stat-panel"><div class="section-heading"><div><p class="eyebrow">RECORD A PLAY</p><h3>${esc(playerLabel(p))}</h3></div><button data-edit="${esc(p.id)}">Edit totals</button></div><div class="stat-grid">${fields.map(([key,label,symbol,type]) => `<button class="stat ${type}" data-stat="${key}" aria-label="Record ${esc(label)} for ${esc(p.name)}"><span class="stat-icon">${symbol}${type === 'made' ? '<sup>✓</sup>' : type === 'missed' ? '<sup>×</sup>' : ''}</span><span>${label}</span><b>${p.stats[key]}</b></button>`).join('')}</div><p class="small muted">One tap = one play. Made shots update points and attempts automatically.</p></div>` : `<div class="select-hint"><span>↑</span><h3>${g.players.length ? 'Who made the play?' : 'Build your game roster'}</h3><p>${g.players.length ? 'Select a player above to reveal their stat buttons.' : 'Add saved players to start recording.'}</p></div>`}`;
+  return `<div class="section-heading"><h3>On The Roster <span class="muted">/ ${g.players.length}</span></h3><button data-add>＋ Add Players</button></div><div class="players">${g.players.map(p => `<button class="player ${p.id === selected ? 'selected' : ''}" data-player="${esc(p.id)}" aria-pressed="${p.id === selected}"><span class="jersey">${esc(p.number || p.name.split(/\s+/).map(n=>n[0]).join('').slice(0,2).toUpperCase())}</span><span class="player-name">${esc(p.name)}</span><span class="player-points">${totals(p.stats).points} <small>PTS</small></span></button>`).join('')}</div>
+  ${p ? `<div class="stat-panel"><div class="section-heading"><div><p class="eyebrow">RECORD A PLAY</p><h3>${esc(playerLabel(p))}</h3></div><button data-edit="${esc(p.id)}">Edit Totals</button></div><div class="stat-grid">${fields.map(([key,label,symbol,type]) => `<button class="stat ${type}" data-stat="${key}" aria-label="Record ${esc(label)} for ${esc(p.name)}"><span class="stat-icon">${symbol}${type === 'made' ? '<sup>✓</sup>' : type === 'missed' ? '<sup>×</sup>' : ''}</span><span>${label}</span><b>${p.stats[key]}</b></button>`).join('')}</div><p class="small muted">One tap = one play. Made shots update points and attempts automatically.</p></div>` : `<div class="select-hint"><span>↑</span><h3>${g.players.length ? 'Who Made The Play?' : 'Build Your Game Roster'}</h3><p>${g.players.length ? 'Select a player above to reveal their stat buttons.' : 'Add saved players to start recording.'}</p></div>`}`;
 }
 const columns = [['points','PTS'],['rebounds','REB'],['assists','AST'],['steals','STL'],['blocks','BLK'],['fgm','FGM'],['fga','FGA'],['fgPct','FG%'],['threeMade','3PM'],['threeAtt','3PA'],['threePct','3P%'],['ftMade','FTM'],['ftAtt','FTA'],['ftPct','FT%'],['offReb','OREB'],['defReb','DREB'],['turnovers','TOV']];
 function tableMarkup(g) {
   const row = (name, stats, action='') => `<tr><th scope="row">${name}</th>${columns.map(([key]) => `<td>${totals(stats)[key]}</td>`).join('')}<td>${action}</td></tr>`;
-  return `<div class="section-heading"><h3>Game box score</h3><button data-add>＋ Add players</button></div><div class="table-wrap"><table><caption class="sr-only">Player and team basketball statistics</caption><thead><tr><th scope="col">Player</th>${columns.map(([,label])=>`<th scope="col">${label}</th>`).join('')}<th scope="col">Edit</th></tr></thead><tbody>${g.players.map(p=>row(esc(playerLabel(p)),p.stats,`<button data-edit="${esc(p.id)}" aria-label="Edit stats for ${esc(p.name)}">Edit</button>`)).join('')}</tbody><tfoot>${row('Team total',teamStats(g))}</tfoot></table></div>`;
+  return `<div class="section-heading"><h3>Game Box Score</h3><button data-add>＋ Add Players</button></div><div class="table-wrap"><table><caption class="sr-only">Player And Team Basketball Statistics</caption><thead><tr><th scope="col">Player</th>${columns.map(([,label])=>`<th scope="col">${label}</th>`).join('')}<th scope="col">Edit</th></tr></thead><tbody>${g.players.map(p=>row(esc(playerLabel(p)),p.stats,`<button data-edit="${esc(p.id)}" aria-label="Edit Stats For ${esc(p.name)}">Edit</button>`)).join('')}</tbody><tfoot>${row('Team Total',teamStats(g))}</tfoot></table></div>`;
 }
-function teamOptions() { return '<option value="">Individual players / no team</option>' + state.teams.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join(''); }
+function teamOptions() { return '<option value="">Individual Players / No Team</option>' + state.teams.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join(''); }
 function resetPlayerForm(player = null) {
   editingPlayer = player?.id || null;
   const form = $('#player-form');
   form.reset();
-  $('#player-form-title').textContent = player ? 'Edit player' : 'Add a player';
+  $('#player-form-title').textContent = player ? 'Edit Player' : 'Add A Player';
   form.elements.name.value = player?.name || '';
   form.elements.number.value = player?.number || '';
   $('#player-teams').innerHTML = state.teams.map(team => {
     const assigned = player && team.playerIds.includes(player.id);
     return `<label class="check-row"><input type="checkbox" name="teams" value="${esc(team.id)}" ${assigned ? 'checked' : ''}>${esc(team.name)}</label>`;
   }).join('') || '<p class="small muted">No saved teams yet. This player can be saved without a team.</p>';
-  form.querySelector('[type="submit"]').textContent = player ? 'Save player changes' : '＋ Save player';
+  form.querySelector('[type="submit"]').textContent = player ? 'Save Player Changes' : '＋ Save Player';
   $('#player-cancel').hidden = !player;
 }
 function showRoster() {
@@ -137,10 +138,10 @@ function showRoster() {
   $('#roster-dialog').showModal();
 }
 function renderRoster() {
-  $('#roster-list').innerHTML = state.roster.length ? state.roster.map(p=>`<div class="roster-row"><span class="jersey">${esc(p.number || '♟')}</span><div class="roster-details"><strong>${esc(p.name)}</strong><p class="small muted">${esc(state.teams.filter(t=>t.playerIds.includes(p.id)).map(t=>t.name).join(' · ') || 'Individual player')}</p></div><div class="player-actions"><button data-player-edit="${esc(p.id)}" aria-label="Edit player ${esc(p.name)}">Edit</button><button class="danger" data-player-delete="${esc(p.id)}" aria-label="Delete player ${esc(p.name)}">Delete</button></div></div>`).join('') : '<p class="muted">No players yet. Add your first player above.</p>';
+  $('#roster-list').innerHTML = state.roster.length ? state.roster.map(p=>`<div class="roster-row"><span class="jersey">${esc(p.number || '♟')}</span><div class="roster-details"><strong>${esc(p.name)}</strong><p class="small muted">${esc(state.teams.filter(t=>t.playerIds.includes(p.id)).map(t=>t.name).join(' · ') || 'Individual player')}</p></div><div class="player-actions"><button data-player-edit="${esc(p.id)}" aria-label="Edit Player ${esc(p.name)}">Edit</button><button class="danger" data-player-delete="${esc(p.id)}" aria-label="Delete Player ${esc(p.name)}">Delete</button></div></div>`).join('') : '<p class="muted">No players yet. Add your first player above.</p>';
 }
 
-function choices(players, checked=false) { return players.map(p=>`<label class="check-row"><input type="checkbox" name="players" value="${esc(p.id)}" ${checked ? 'checked' : ''}>${esc(playerLabel(p))}</label>`).join('') || '<p class="muted">No available players. Add players in Manage player roster.</p>'; }
+function choices(players, checked=false) { return players.map(p=>`<label class="check-row"><input type="checkbox" name="players" value="${esc(p.id)}" ${checked ? 'checked' : ''}>${esc(playerLabel(p))}</label>`).join('') || '<p class="muted">No available players. Add players in Manage Player Roster.</p>'; }
 function selectTeamPlayers(container, teamId) {
   const ids = state.teams.find(t=>t.id===teamId)?.playerIds || [];
   container.querySelectorAll('input[name="players"]').forEach(input=>input.checked=ids.includes(input.value));
@@ -153,12 +154,12 @@ function showGameDialog() {
   $('#game-dialog').showModal();
 }
 function renderTeams() {
-  $('#teams-list').innerHTML=state.teams.map(t=>`<div class="team-row"><div><strong>${esc(t.name)}</strong><small>${t.playerIds.length} players</small></div><div class="team-actions"><button data-team-edit="${esc(t.id)}" aria-label="Edit team ${esc(t.name)}">Edit</button><button class="danger" data-team-delete="${esc(t.id)}" aria-label="Delete team ${esc(t.name)}">Delete</button></div></div>`).join('') || '<p class="muted">No teams yet. Create your first team below.</p>';
+  $('#teams-list').innerHTML=state.teams.map(t=>`<div class="team-row"><div><strong>${esc(t.name)}</strong><small>${t.playerIds.length} players</small></div><div class="team-actions"><button data-team-edit="${esc(t.id)}" aria-label="Edit Team ${esc(t.name)}">Edit</button><button class="danger" data-team-delete="${esc(t.id)}" aria-label="Delete Team ${esc(t.name)}">Delete</button></div></div>`).join('') || '<p class="muted">No teams yet. Create your first team below.</p>';
 }
 function resetTeamForm(team=null) {
   editingTeam=team?.id || null;
   $('#team-form').reset();
-  $('#team-form-title').textContent=team ? 'Edit team' : 'Create a team';
+  $('#team-form-title').textContent=team ? 'Edit Team' : 'Create A Team';
   $('#team-form').elements.name.value=team?.name || '';
   $('#team-player-options').innerHTML=choices(state.roster);
   if(team) selectTeamPlayers($('#team-player-options'),team.id);
@@ -179,7 +180,46 @@ function onSaveForm(selector, handler) {
     try { await handler(e.target); } finally { button.disabled=false; }
   };
 }
-onSaveForm('#team-form',async f=>{
+onSaveForm('#game-details-form', async form => {
+  const gameId = editingGame;
+  const title = form.elements.title.value.trim();
+  const date = form.elements.date.value;
+  if (!title) return form.elements.title.focus();
+  if (await commit(data => CourtGames.updateGame(data, gameId, title, date))) {
+    $('#game-details-dialog').close();
+    notice('Game name and date updated.');
+  }
+});
+onSaveForm('#delete-game-form', async () => {
+  const gameId = deletingGame;
+  if (!gameId) return;
+  if (await commit(data => CourtGames.deleteGame(data, gameId))) {
+    deletingGame = null;
+    selected = null;
+    $('#delete-game-dialog').close();
+    render();
+    notice('Game deleted. Saved teams and players were kept.');
+  }
+});
+onSaveForm('#roster-import-form', async () => {
+  const pending = pendingRosterImport;
+  if (!pending) return;
+  let result;
+  const saved = await commit(data => {
+    if (pending.type === 'json') CourtRoster.replaceRoster(data, pending.data);
+    else result = CourtRoster.appendCsv(data, pending.rows, id);
+  });
+  if (!saved) return;
+  pendingRosterImport = null;
+  editingPlayer = null;
+  editingTeam = null;
+  $('#roster-import-dialog').close();
+  $('#data-dialog').close();
+  notice(pending.type === 'json' ? 'Saved teams and players replaced. Existing games were kept.' :
+    `CSV imported: ${result.teamsAdded} teams, ${result.playersAdded} players, and ${result.membershipsAdded} memberships added.`);
+});
+$('#roster-import-dialog').addEventListener('close', () => { pendingRosterImport = null; });
+onSaveForm('#team-form' ,async f=>{
   const name=f.elements.name.value.trim(); if(!name) return f.elements.name.focus();
   const playerIds=new FormData(f).getAll('players'), teamId=editingTeam || id();
   if(await commit(s=>{const team=s.teams.find(t=>t.id===teamId);if(team){team.name=name;team.playerIds=playerIds;}else s.teams.push({id:teamId,name,playerIds});})) {
@@ -260,6 +300,21 @@ onSaveForm('#edit-form',async f=>{
 document.addEventListener('click',async e=>{
   const b=e.target.closest('button');if(!b || storageBlocked)return;
   if(b.hasAttribute('data-new'))showGameDialog();
+  if (b.hasAttribute('data-game-details')) {
+    const current = game();
+    editingGame = current.id;
+    $('#game-details-form').elements.title.value = current.title;
+    $('#game-details-form').elements.date.value = current.date;
+    $('#game-details-dialog .dialog-notice').textContent = '';
+    $('#game-details-dialog').showModal();
+  }
+  if (b.hasAttribute('data-game-delete')) {
+    const current = game();
+    deletingGame = current.id;
+    $('#delete-game-description').textContent = `Delete ${current.title} (${dateText(current.date)})?`;
+    $('#delete-game-dialog .dialog-notice').textContent = '';
+    $('#delete-game-dialog').showModal();
+  }
   if(b.dataset.playerEdit){
     resetPlayerForm(state.roster.find(p=>p.id===b.dataset.playerEdit));
     $('#player-form').elements.name.focus();
@@ -299,7 +354,7 @@ document.addEventListener('click',async e=>{
 function exportCsv() {
   const g=game(); const headings=['Game','Date','Team','Player','Number',...columns.map(([,label])=>label)];
   const record=(name,number,s)=>[g.title,g.date,g.teamName || '',name,number,...columns.map(([key])=>totals(s)[key])];
-  const rows=[headings,...g.players.map(p=>record(p.name,p.number,p.stats)),record('Team total','',teamStats(g))];
+  const rows=[headings,...g.players.map(p=>record(p.name,p.number,p.stats)),record('Team Total','',teamStats(g))];
   const content = '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
   downloadFile(`${g.date}-${g.title.replace(/[^a-z0-9_-]/gi,'-')}.csv`, content, 'text/csv;charset=utf-8;');
   notice('CSV exported.');
@@ -318,6 +373,7 @@ function downloadFile(filename, content, type) {
 function showDataDialog() {
   if (storageBlocked) return;
   $('#import-data').value = '';
+  $('#import-roster').value = '';
   $('#data-dialog .dialog-notice').textContent = '';
   $('#data-dialog').showModal();
 }
@@ -346,6 +402,53 @@ async function previewImport() {
     $('#import-data').disabled = false;
   }
 }
+async function exportRoster(type) {
+  await saveQueue;
+  if (type === 'json') downloadFile('courtside-roster.json', CourtRoster.exportJson(state), 'application/json');
+  else downloadFile('courtside-roster.csv', CourtRoster.exportCsv(state), 'text/csv;charset=utf-8;');
+  notice('Teams and players exported.');
+}
+async function previewRosterImport() {
+  const input = $('#import-roster');
+  const file = input.files[0];
+  input.value = '';
+  pendingRosterImport = null;
+  if (!file) return;
+  input.disabled = true;
+  try {
+    if (file.size > 20 * 1024 * 1024) throw new Error('Choose a file smaller than 20 MB.');
+    const text = await file.text();
+    let pending;
+    if (file.name.toLowerCase().endsWith('.csv')) {
+      const rows = CourtRoster.readCsv(text);
+      pending = { type: 'csv', rows };
+      $('#roster-import-title').textContent = 'Append Teams And Players?';
+      $('#roster-import-description').textContent = `${rows.length} CSV records are ready to import.`;
+      $('#roster-import-effect').textContent = 'Existing teams and players will be kept. Matching teams and players will be reused; new records and memberships will be added. Existing games stay unchanged.';
+      $('#confirm-roster-import').textContent = 'Append Teams And Players';
+      $('#confirm-roster-import').className = 'primary';
+    } else {
+      const data = CourtRoster.readJson(text, validState);
+      pending = { type: 'json', data };
+      $('#roster-import-title').textContent = 'Replace Teams And Players?';
+      $('#roster-import-description').textContent = `The file contains ${data.roster.length} players and ${data.teams.length} teams.`;
+      $('#roster-import-effect').textContent = 'This replaces every saved team and reusable player, preserving the imported IDs. Existing games and their player snapshots, statistics, and undo history are kept. Export your current roster first if you want to keep a copy. Replacement cannot be undone through the app.';
+      $('#confirm-roster-import').textContent = 'Replace Teams And Players';
+      $('#confirm-roster-import').className = 'danger';
+    }
+    if (!$('#data-dialog').open) return;
+    pendingRosterImport = pending;
+    $('#roster-import-dialog .dialog-notice').textContent = '';
+    $('#roster-import-dialog').showModal();
+  } catch (error) {
+    notice(`Import canceled: ${error.message}`);
+  } finally {
+    input.disabled = false;
+  }
+}
+$('#export-roster-json').onclick = () => exportRoster('json');
+$('#export-roster-csv').onclick = () => exportRoster('csv');
+$('#import-roster').onchange = previewRosterImport;
 $('#data-button').onclick = showDataDialog;
 $('#export-data').onclick = exportAllData;
 $('#import-data').onchange = previewImport;
